@@ -15,8 +15,9 @@ const validateEnv = () => {
 const buildTransporter = () => {
   const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',       // explicit host — more reliable than service:'gmail'
-    port: 465,                    // SSL port
-    secure: true,                 // true for port 465
+    port: 587,                    // STARTTLS port (preferred for Render)
+    secure: false,                // false for port 587, true for 465
+    requireTLS: true,             // Force TLS since secure is false
     auth: {
       user: process.env.EMAIL_USER as string,
       pass: process.env.EMAIL_PASS as string,  // 16-char Gmail App Password
