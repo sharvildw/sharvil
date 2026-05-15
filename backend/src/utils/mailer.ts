@@ -15,15 +15,19 @@ const validateEnv = () => {
 const buildTransporter = () => {
   const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',       // explicit host — more reliable than service:'gmail'
-    port: 465,                    // SSL port (use 587 + secure:false if 465 blocked)
-    secure: true,                 // true for port 465, false for 587
+    port: 465,                    // SSL port
+    secure: true,                 // true for port 465
     auth: {
       user: process.env.EMAIL_USER as string,
-      pass: process.env.EMAIL_PASS as string,  // 16-char Gmail App Password (no spaces)
+      pass: process.env.EMAIL_PASS as string,  // 16-char Gmail App Password
     },
     tls: {
       rejectUnauthorized: false,  // handles self-signed cert issues in dev
     },
+    // Production timeouts to prevent hanging on Render
+    connectionTimeout: 10000,     // 10 seconds
+    greetingTimeout: 10000,       // 10 seconds
+    socketTimeout: 15000,         // 15 seconds
   });
   return transporter;
 };
@@ -31,14 +35,20 @@ const buildTransporter = () => {
 // ─── Verify SMTP connection ───────────────────────────────────────────────────
 export const verifyMailer = async (): Promise<boolean> => {
   if (!validateEnv()) return false;
+  
+  console.log(`[MAILER] ⏳ Verifying SMTP connection to smtp.gmail.com...`);
   try {
     const transporter = buildTransporter();
     await transporter.verify();
     console.log(`[MAILER] ✅ SMTP connection verified (${process.env.EMAIL_USER})`);
     return true;
   } catch (err: any) {
-    console.error('[MAILER] ❌ SMTP verification failed:', err.message);
-    console.error('[MAILER] Fix: Ensure Gmail App Password is correct & 2FA is enabled on your account.');
+    console.error(`[MAILER] ❌ SMTP verification failed: ${err.message}`);
+    if (err.message.includes('timeout')) {
+      console.error(`[MAILER] 💡 FIX: The connection timed out. Ensure Render allows outbound SMTP (port 465). Sometimes IPv6 causes issues. You might try port 587 with secure:false if 465 remains blocked.`);
+    } else {
+      console.error(`[MAILER] 💡 FIX: Ensure Gmail App Password is correct & 2FA is enabled.`);
+    }
     return false;
   }
 };
@@ -123,25 +133,31 @@ export const sendContactEmail = async (opts: {
 
   const transporter = buildTransporter();
 
-  console.log(`[MAILER] Sending notification to ${process.env.EMAIL_TO} ...`);
+  try {
+    console.log(`[MAILER] ⏳ Attempting to send notification to ${process.env.EMAIL_TO} ...`);
+    
+    // 1. Notification to portfolio owner
+    const info1 = await transporter.sendMail({
+      from: `"Portfolio Contact" <${process.env.EMAIL_USER}>`,
+      to:   process.env.EMAIL_TO,
+      replyTo: opts.senderEmail,
+      subject: `New Contact: ${opts.subject}`,
+      html: buildNotificationHtml(opts),
+    });
+    console.log(`[MAILER] ✅ Notification sent successfully. MessageId: ${info1.messageId}`);
 
-  // 1. Notification to portfolio owner
-  const info1 = await transporter.sendMail({
-    from: `"Portfolio Contact" <${process.env.EMAIL_USER}>`,
-    to:   process.env.EMAIL_TO,
-    replyTo: opts.senderEmail,
-    subject: `New Contact: ${opts.subject}`,
-    html: buildNotificationHtml(opts),
-  });
-  console.log(`[MAILER] Notification sent. MessageId: ${info1.messageId}`);
-
-  // 2. Auto-reply to sender
-  console.log(`[MAILER] Sending auto-reply to ${opts.senderEmail} ...`);
-  const info2 = await transporter.sendMail({
-    from:    `"Sharvil Waghmare" <${process.env.EMAIL_USER}>`,
-    to:      opts.senderEmail,
-    subject: `Re: ${opts.subject} - Thanks for reaching out!`,
-    html:    buildAutoReplyHtml(opts),
-  });
-  console.log(`[MAILER] Auto-reply sent. MessageId: ${info2.messageId}`);
+    // 2. Auto-reply to sender
+    console.log(`[MAILER] ⏳ Attempting to send auto-reply to ${opts.senderEmail} ...`);
+    const info2 = await transporter.sendMail({
+      from:    `"Sharvil Waghmare" <${process.env.EMAIL_USER}>`,
+      to:      opts.senderEmail,
+      subject: `Re: ${opts.subject} - Thanks for reaching out!`,
+      html:    buildAutoReplyHtml(opts),
+    });
+    console.log(`[MAILER] ✅ Auto-reply sent successfully. MessageId: ${info2.messageId}`);
+    
+  } catch (error: any) {
+    console.error(`[MAILER] ❌ Failed to send email: ${error.message}`);
+    throw new Error(`Email sending failed: ${error.message}`);
+  }
 };
