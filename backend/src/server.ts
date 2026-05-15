@@ -6,6 +6,10 @@ import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import path from 'path';
+import bcrypt from 'bcrypt';
+
+import apiRoutes from './routes/api';
+import { User } from './models/User';
 import { verifyMailer } from './utils/mailer';
 
 dotenv.config();
@@ -14,82 +18,111 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
-// ── CORS ─────────────────────────────────────────────────────────────────────
+// ── 1. Production-Ready CORS Configuration ─────────────────────────────────────
 const allowedOrigins = [
-  process.env.CLIENT_URL || 'http://localhost:5173',
   'http://localhost:5173',
-  'http://localhost:4173', // vite preview
-];
+  'https://sharvil.vercel.app',
+  process.env.CLIENT_URL // Fallback if set in env
+].filter(Boolean) as string[];
 
 app.use(cors({
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-    // Allow requests with no origin (Postman, server-to-server)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    callback(new Error(`CORS: origin ${origin} not allowed`));
+    // Allow requests with no origin (e.g., Postman, server-to-server)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    
+    // CORS Debug Logging (Very useful for Render/Vercel debugging)
+    console.warn(`[CORS] Blocked request from unauthorized origin: ${origin}`);
+    callback(new Error(`CORS policy: The origin ${origin} is not allowed.`));
   },
-  credentials: true,
+  credentials: true, // Crucial for sending cookies/JWT across subdomains
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
 }));
 
-// ── Core middleware ───────────────────────────────────────────────────────────
+// ── 2. Core Middleware ────────────────────────────────────────────────────────
 app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(NODE_ENV === 'production' ? morgan('combined') : morgan('dev'));
 app.use(cookieParser());
 
-// ── Static files (for production: serve uploaded cert files) ─────────────────
+// ── 3. Static Asset Serving ───────────────────────────────────────────────────
 app.use('/certificates', express.static(path.join(__dirname, '../../frontend/public/certificates')));
 
-import { User } from './models/User';
-import bcrypt from 'bcrypt';
-
-// ── DB Connection + seeding ───────────────────────────────────────────────────
+// ── 4. Robust MongoDB Connection Handling ─────────────────────────────────────
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(
-      process.env.MONGO_URI || 'mongodb://localhost:27017/portfolio'
-    );
-    console.log(`[DB] Connected: ${conn.connection.host}`);
+    const mongoURI = process.env.MONGO_URI || 'mongodb://localhost:27017/portfolio';
+    
+    console.log(`[DB] Attempting connection to MongoDB...`);
+    
+    const conn = await mongoose.connect(mongoURI, {
+      serverSelectionTimeoutMS: 5000, // Fail fast if Atlas is blocking IP
+      socketTimeoutMS: 45000,
+    });
+    
+    console.log(`[DB] ✅ MongoDB Connected Successfully: ${conn.connection.host}`);
 
-    // Seed admin user
+    // Seed default admin
     const adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com';
     const adminPass  = process.env.ADMIN_PASS  || 'admin123';
+    
     const adminExists = await User.findOne({ email: adminEmail });
     if (!adminExists) {
       const hashed = await bcrypt.hash(adminPass, 12);
       await User.create({ username: 'Admin', email: adminEmail, password: hashed, role: 'admin' });
-      console.log(`[DB] Admin seeded: ${adminEmail}`);
+      console.log(`[DB] 🛡️ Default Admin seeded: ${adminEmail}`);
     }
 
-    // Verify SMTP (non-blocking — won't crash server on failure)
-    verifyMailer().catch(() => {});
+    // SMTP check (Non-blocking)
+    verifyMailer().catch(() => console.warn(`[MAILER] ⚠️ SMTP setup pending or failed.`));
 
-  } catch (error) {
-    console.error('[DB] Connection failed:', error);
+  } catch (error: any) {
+    console.error(`[DB] ❌ MongoDB Connection Error:`, error.message);
+    if (error.message.includes('bad auth')) {
+      console.error(`[DB] 💡 FIX: Check your MONGO_URI username and password.`);
+    } else if (error.message.includes('timeout')) {
+      console.error(`[DB] 💡 FIX: Ensure Render IP (0.0.0.0/0) is whitelisted in MongoDB Atlas Network Access.`);
+    }
     process.exit(1);
   }
 };
 
-import apiRoutes from './routes/api';
-
-// ── Routes ────────────────────────────────────────────────────────────────────
-app.get('/health', (_req: Request, res: Response) => res.json({ status: 'ok', env: NODE_ENV }));
-app.get('/', (_req: Request, res: Response) => res.json({ message: 'Portfolio API is running', env: NODE_ENV }));
-app.use('/api', apiRoutes);
-
-// ── Global error handler ──────────────────────────────────────────────────────
-app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
-  const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
-  console.error('[ERROR]', err.message);
-  res.status(statusCode).json({
-    message: err.message,
-    ...(NODE_ENV !== 'production' && { stack: err.stack }),
-  });
+// ── 5. Routes ─────────────────────────────────────────────────────────────────
+app.get('/health', (_req: Request, res: Response) => {
+  res.status(200).json({ status: 'ok', message: 'Backend is healthy', env: NODE_ENV });
 });
 
-// ── Start ─────────────────────────────────────────────────────────────────────
+app.get('/', (_req: Request, res: Response) => {
+  res.status(200).json({ message: 'Portfolio API is running flawlessly', env: NODE_ENV });
+});
+
+app.use('/api', apiRoutes);
+
+// ── 6. Global Async Error Handler ──────────────────────────────────────────────
+app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
+  const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
+  
+  // Don't leak stack traces in production
+  const errorResponse = {
+    message: err.message || 'Internal Server Error',
+    ...(NODE_ENV !== 'production' && { stack: err.stack }),
+  };
+
+  console.error(`[ERROR] ${req.method} ${req.url} -> ${err.message}`);
+  res.status(statusCode).json(errorResponse);
+});
+
+// ── 7. Server Startup ─────────────────────────────────────────────────────────
 app.listen(PORT, async () => {
+  console.log(`[SERVER] 🚀 Starting up...`);
   await connectDB();
-  console.log(`[SERVER] Running on port ${PORT} (${NODE_ENV})`);
+  console.log(`[SERVER] ✅ Running on port ${PORT} in ${NODE_ENV} mode.`);
+  console.log(`[CORS] Allowed Origins:`, allowedOrigins.join(', '));
 });
