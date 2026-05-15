@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -22,7 +22,7 @@ const allowedOrigins = [
 ];
 
 app.use(cors({
-  origin: (origin, callback) => {
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
     // Allow requests with no origin (Postman, server-to-server)
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
@@ -74,12 +74,12 @@ const connectDB = async () => {
 import apiRoutes from './routes/api';
 
 // ── Routes ────────────────────────────────────────────────────────────────────
-app.get('/health', (_req, res) => res.json({ status: 'ok', env: NODE_ENV }));
-app.get('/', (_req, res) => res.json({ message: 'Portfolio API is running', env: NODE_ENV }));
+app.get('/health', (_req: Request, res: Response) => res.json({ status: 'ok', env: NODE_ENV }));
+app.get('/', (_req: Request, res: Response) => res.json({ message: 'Portfolio API is running', env: NODE_ENV }));
 app.use('/api', apiRoutes);
 
 // ── Global error handler ──────────────────────────────────────────────────────
-app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
   const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
   console.error('[ERROR]', err.message);
   res.status(statusCode).json({
