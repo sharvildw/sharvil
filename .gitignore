@@ -1,0 +1,25 @@
+# ── Root ──────────────────────────────────────────────────────────────────────
+.DS_Store
+*.log
+*.tmp
+*.py          # Python scripts (migration helpers)
+*.jfif        # Certificate images (committed to public/)
+
+# ── Frontend ──────────────────────────────────────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+
+# ── Backend ───────────────────────────────────────────────────────────────────
+backend/node_modules/
+backend/dist/
+backend/.env
+backend/.env.local
+
+# Migration / debug scripts
+backend/fix_*.py
+backend/migrate_*.py
+backend/read_*.py
+backend/update_*.py
+backend/package.deployment.json
