@@ -71,8 +71,8 @@ export const testEmail = async (req: Request, res: Response) => {
     await sendContactEmail({
       senderName:  'Test User',
       senderEmail: process.env.EMAIL_TO as string,
-      subject:     'SMTP Test',
-      message:     'This is a test email from your portfolio backend. If you see this, Nodemailer is working correctly!',
+      subject:     'Resend API Test',
+      message:     'This is a test email from your portfolio backend. If you see this, Resend is configured correctly and working in production!',
     });
     res.json({ success: true, message: 'Test email sent! Check your inbox.' });
   } catch (err: any) {

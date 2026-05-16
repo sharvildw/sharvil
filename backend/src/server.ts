@@ -80,8 +80,8 @@ const connectDB = async () => {
       console.log(`[DB] 🛡️ Default Admin seeded: ${adminEmail}`);
     }
 
-    // SMTP check (Non-blocking)
-    verifyMailer().catch(() => console.warn(`[MAILER] ⚠️ SMTP setup pending or failed.`));
+    // Resend API check (Non-blocking)
+    verifyMailer().catch(() => console.warn(`[MAILER] ⚠️ Resend API key missing or invalid. Check RESEND_API_KEY env var.`));
 
   } catch (error: any) {
     console.error(`[DB] ❌ MongoDB Connection Error:`, error.message);
