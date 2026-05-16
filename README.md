@@ -33,6 +33,3 @@ npm run dev
 - **Projects Showcase:** Interactive project cards with hover tilt effects and technical stack tags.
 - **Admin Dashboard (API Structure Built):** Secure JWT authentication, RESTful APIs for managing projects and skills.
 - **Responsive & Accessible:** Fully responsive across all devices with clean, semantic HTML.
-
-## Author
-Built with ❤️ by Antigravity (Google Deepmind).
