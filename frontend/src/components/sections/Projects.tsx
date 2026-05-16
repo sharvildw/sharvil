@@ -57,7 +57,7 @@ const STATIC_PROJECTS = [
     description: 'A highly polished, futuristic, and responsive full-stack portfolio platform built using React, Vite, TypeScript, and Framer Motion.',
     image: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&q=80&w=800',
     techStack: ['React', 'TypeScript', 'Tailwind', 'Framer Motion'],
-    githubUrl: 'https://github.com/sharvildw/Portfolio',
+    githubUrl: 'https://github.com/sharvildw/sharvil',
     liveUrl: '#'
   }
 ];
